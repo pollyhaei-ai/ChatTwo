@@ -189,8 +189,42 @@ public class MessageStore : IDisposable
                 break;
         }
 
+        if (migrationsToDo.Count > 0)
+            PreserveUntouchedCopy();
+
         foreach (var migration in migrationsToDo)
             migration();
+
+        // Rows written by 1.42.0 stored the packed code. Low 7 bits are the log kind.
+        // Values already under 128 are unchanged, so an older build keeps reading them.
+        RepairPackedChatTypes();
+    }
+
+    // Never overwrite a copy that already exists: that file may be the last pre-1.42.0 database.
+    private void PreserveUntouchedCopy()
+    {
+        var copy = DbPath + "-before-1.42.1";
+        if (File.Exists(copy) || !File.Exists(DbPath))
+            return;
+
+        File.Copy(DbPath, copy);
+        Plugin.Log.Information($"Copied the chat database to {copy} before migrating");
+    }
+
+    private void RepairPackedChatTypes()
+    {
+        try
+        {
+            using var cmd = Connection.CreateCommand();
+            cmd.CommandText = "UPDATE messages SET ChatType = (ChatType & 127) WHERE ChatType >= 128;";
+            var changed = cmd.ExecuteNonQuery();
+            if (changed > 0)
+                Plugin.Log.Information($"Normalized {changed} chat rows whose ChatType was a packed code");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Warning(ex, "Could not normalize packed ChatType values; existing rows were left untouched");
+        }
     }
 
     private void Migrate0()
@@ -309,19 +343,16 @@ public class MessageStore : IDisposable
             Connection.Close();
             Connection.Dispose();
 
-            File.Delete(DbPath);
-
+            // Leave chat-sqlite.db and chat-sqlite.db-migration-bak on disk.
+            // Deleting them is what made an older ChatTwo lose its history.
             Plugin.Config.MigrationStatus = MigrationStatus.Failed;
             Plugin.SaveConfig();
 
             throw;
         }
 
-        // Only delete backup if migration has successfully ran the first time
         if (Plugin.Config.MigrationStatus == MigrationStatus.Copied)
         {
-            File.Delete($"{DbPath}-migration-bak");
-
             Plugin.Config.MigrationStatus = MigrationStatus.Finished;
             Plugin.SaveConfig();
         }

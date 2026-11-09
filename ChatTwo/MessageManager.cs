@@ -38,7 +38,7 @@ public class MessageManager : IAsyncDisposable
     private readonly Thread PendingMessageThread;
     private readonly CancellationTokenSource PendingThreadCancellationToken = new();
 
-    private Hook<RaptureLogModule.Delegates.AddMsgSourceEntry>? ContentIdResolverHook { get; init; }
+    private Hook<RaptureLogModule.Delegates.AddMsgSourceEntry>? ContentIdResolverHook { get; set; }
 
     public ulong CurrentContentId
     {
@@ -57,30 +57,36 @@ public class MessageManager : IAsyncDisposable
         {
             Store = new MessageStore(plugin, DatabasePath());
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
-            // migration failed, so we create a new database
-            if (Plugin.Config.MigrationStatus == MigrationStatus.Failed)
-            {
-                Plugin.Log.Warning("Migration failed, attempting fresh database");
-                Store = new MessageStore(plugin, DatabasePath());
-
-                Plugin.Config.MigrationStatus = MigrationStatus.Finished;
-                Plugin.SaveConfig();
-            }
-            else
-            {
-                // Something else went wrong, rethrow
-                Plugin.Log.Error(ex, "Failed to open database");
-                throw;
-            }
+            // Do not replace the shared database with an empty file. An older ChatTwo
+            // reads the same chat-sqlite.db; wiping it empties that build too.
+            Plugin.Log.Error(ex, "Failed to open the chat database. The existing file was left in place.");
+            throw;
         }
 
         PendingMessageThread = new Thread(() => ProcessPendingMessages(PendingThreadCancellationToken.Token));
         PendingMessageThread.Start();
 
-        ContentIdResolverHook = Plugin.GameInteropProvider.HookFromAddress<RaptureLogModule.Delegates.AddMsgSourceEntry>(RaptureLogModule.MemberFunctionPointers.AddMsgSourceEntry, ContentIdResolver);
-        ContentIdResolverHook.Enable();
+        try
+        {
+            var address = (nint)RaptureLogModule.MemberFunctionPointers.AddMsgSourceEntry;
+            if (address == nint.Zero)
+            {
+                Plugin.Log.Information("AddMsgSourceEntry was not found; messages will not carry a sender content id");
+            }
+            else
+            {
+                ContentIdResolverHook = Plugin.GameInteropProvider.HookFromAddress<RaptureLogModule.Delegates.AddMsgSourceEntry>(address, ContentIdResolver);
+                ContentIdResolverHook.Enable();
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Could not hook AddMsgSourceEntry; chat display does not depend on it");
+            ContentIdResolverHook?.Dispose();
+            ContentIdResolverHook = null;
+        }
 
         Plugin.ChatGui.ChatMessageUnhandled += ChatMessage;
         Plugin.Framework.Update += OnFrameworkUpdate;
@@ -179,17 +185,9 @@ public class MessageManager : IAsyncDisposable
 
         if (!messages.DidError) return;
 
-        WrapperUtil.AddNotification(Language.LoadMessages_Error, NotificationType.Error);
-
-        // Mark the failed messages as deleted so we don't try to load them
-        // again.
-        var failedIds = messages.FailedMessageIds();
-        Plugin.Log.Info($"Marking {failedIds.Count} messages as deleted due to parse failures");
-        foreach (var msgId in messages.FailedMessageIds())
-        {
-            Plugin.Log.Debug($"Marking message '{msgId}' as deleted due to parse failure");
-            Store.DeleteMessage(msgId);
-        }
+        // Leave the rows in place. Marking them deleted hid history from every
+        // ChatTwo that shares this database, including the build that wrote them.
+        Plugin.Log.Warning($"Skipped {messages.FailedMessageIds().Count} chat rows that this build could not read. They were not deleted.");
     }
 
     public void FilterAllTabsAsync()
