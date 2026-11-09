@@ -58,6 +58,11 @@ public class Configuration : IPluginConfiguration
     public int InactivityHideTimeout = 10;
     public bool InactivityHideActiveDuringBattle = true;
 
+    // Kept so a config written by an older ChatTwo still deserializes. 1.42.0 dropped
+    // this field, which threw the saved channel list away the next time the file was saved.
+    [Obsolete("Use InactivityHideChannelsV2 instead")]
+    public Dictionary<ChatType, ChatSource> InactivityHideChannels = [];
+
     public Dictionary<ChatType, (ChatSource, ChatSource)> InactivityHideChannelsV2 = [];
     public bool InactivityHideExtraChatAll = true;
     public HashSet<Guid> InactivityHideExtraChatChannels = [];
@@ -243,6 +248,11 @@ public static class UnreadModeExt
 public class Tab
 {
     public string Name = Language.Tab_DefaultName;
+
+    // Older builds stored the tab filter here. Without this field Newtonsoft drops it on load,
+    // SelectedChannels stays empty, and every channel looks switched off.
+    [Obsolete("Removed in favor of SelectedChannels")]
+    public Dictionary<ChatType, ChatSource> ChatCodes = new();
 
     public Dictionary<ChatType, (ChatSource, ChatSource)> SelectedChannels = new();
     public bool ExtraChatAll;

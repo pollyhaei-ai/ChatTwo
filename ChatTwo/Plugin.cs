@@ -95,6 +95,8 @@ public sealed class Plugin : IDalamudPlugin
             if (Config.Tabs.Count == 0)
                 Config.Tabs.Add(TabsUtil.VanillaGeneral);
 
+            RestoreChannelFilters();
+
             LanguageChanged(Interface.UiLanguage);
             ImGuiUtil.Initialize(this);
 
@@ -111,6 +113,7 @@ public sealed class Plugin : IDalamudPlugin
             FontManager = new FontManager();
 
             MessageManager = new MessageManager(this); // Does it require UI?
+            Log.Information($"Chat database: {MessageManager.DatabasePath()}");
 
             ChatLog = new ChatLog(this);
             SettingsWindow = new SettingsWindow(this);
@@ -230,6 +233,50 @@ public sealed class Plugin : IDalamudPlugin
     public void SaveConfig()
     {
         Interface.SavePluginConfig(Config);
+    }
+
+    // 1.42.0 removed ChatCodes, so a config saved by an older ChatTwo loaded with every
+    // tab's channel list empty. Empty means the tab shows nothing, which is the blank log.
+    private void RestoreChannelFilters()
+    {
+#pragma warning disable CS0618
+        var changed = false;
+
+        if (Config.InactivityHideChannels.Count > 0 && Config.InactivityHideChannelsV2.Count == 0)
+        {
+            Config.InactivityHideChannelsV2 = Config.InactivityHideChannels.ToDictionary(pair => pair.Key, pair => (pair.Value, pair.Value));
+            Config.InactivityHideChannels.Clear();
+            changed = true;
+        }
+
+        foreach (var tab in Config.Tabs)
+        {
+            if (tab.ChatCodes.Count > 0 && tab.SelectedChannels.Count == 0)
+            {
+                tab.SelectedChannels = tab.ChatCodes.ToDictionary(pair => pair.Key, pair => (pair.Value, pair.Value));
+                Log.Information($"Restored {tab.SelectedChannels.Count} channels on tab '{tab.Name}' from the older ChatCodes list");
+                tab.ChatCodes.Clear();
+                changed = true;
+                continue;
+            }
+
+            if (tab.SelectedChannels.Count == 0)
+            {
+                tab.SelectedChannels = TabsUtil.AllChannels();
+                Log.Information($"Tab '{tab.Name}' had no channels selected. Enabled every channel so the log is not blank.");
+                changed = true;
+            }
+        }
+
+        if (Config.Version < 6)
+        {
+            Config.Version = 6;
+            changed = true;
+        }
+
+        if (changed)
+            SaveConfig();
+#pragma warning restore CS0618
     }
 
     public void LanguageChanged(string langCode)

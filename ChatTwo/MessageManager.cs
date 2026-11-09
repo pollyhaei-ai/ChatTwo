@@ -263,7 +263,16 @@ public class MessageManager : IAsyncDisposable
 
         NameFormatting? formatting = null;
         if (pendingMessage.Sender.Payloads.Count > 0)
-            formatting = FormatFor(chatCode.Type);
+        {
+            try
+            {
+                formatting = FormatFor(chatCode.Type);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Warning(ex, $"Could not read the log-kind format for channel {(int)chatCode.Type}; the line is still shown");
+            }
+        }
 
         var senderChunks = new List<Chunk>();
         if (formatting is { IsPresent: true })

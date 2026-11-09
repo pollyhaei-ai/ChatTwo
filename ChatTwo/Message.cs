@@ -85,6 +85,11 @@ public partial class Message
         if (ExtraChatChannel != Guid.Empty)
             return allExtraChatChannels || extraChatChannels.Contains(ExtraChatChannel);
 
+        // An empty filter is what 1.42.0 left behind after it stopped reading ChatCodes.
+        // Treat that as "every channel", not "block the whole tab".
+        if (channels.Count == 0)
+            return true;
+
         var source = (ChatSource)(1 << (int)Code.Source);
         var target = (ChatSource)(1 << (int)Code.Target);
         return Code.Type.IsGm()
