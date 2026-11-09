@@ -100,19 +100,19 @@ public class Configuration : IPluginConfiguration
     public float SymbolsFontSizeV2 = 12.75f;
     public SingleFontSpec GlobalFontV2 = new()
     {
-        // dalamud only ships KR as regular, which chat2 used previously for global fonts
-        FontId = new DalamudAssetFontAndFamilyId(DalamudAsset.NotoSansCjkRegular),
+        // API 13 ships Noto Sans KR Regular, not the later CJK Regular face.
+        FontId = new DalamudAssetFontAndFamilyId(DalamudAsset.NotoSansKrRegular),
         SizePt = 12.75f,
     };
     public SingleFontSpec JapaneseFontV2 = new()
     {
-        FontId = new DalamudAssetFontAndFamilyId(DalamudAsset.NotoSansCjkMedium),
+        FontId = new DalamudAssetFontAndFamilyId(DalamudAsset.NotoSansJpMedium),
         SizePt = 12.75f,
     };
     public bool ItalicEnabled;
     public SingleFontSpec ItalicFontV2 = new()
     {
-        FontId = new DalamudAssetFontAndFamilyId(DalamudAsset.NotoSansCjkRegular),
+        FontId = new DalamudAssetFontAndFamilyId(DalamudAsset.NotoSansKrRegular),
         SizePt = 12.75f,
     };
 

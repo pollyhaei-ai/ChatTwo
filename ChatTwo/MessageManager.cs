@@ -4,7 +4,6 @@ using System.Text;
 using ChatTwo.Code;
 using ChatTwo.Resources;
 using ChatTwo.Util;
-using Dalamud.Game.Chat;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Hooking;
@@ -212,19 +211,22 @@ public class MessageManager : IAsyncDisposable
     }
 
     public (SeString? Sender, SeString? Message) LastMessage = (null, null);
-    private void ChatMessage(IChatMessage message)
+
+    // API 13's ChatMessageUnhandled is (type, timestamp, sender, message). It has no
+    // source/target relation, so both kinds stay LocalPlayer.
+    private void ChatMessage(XivChatType type, int timestamp, SeString sender, SeString message)
     {
-        LastMessage = (message.Sender, message.Message);
+        LastMessage = (sender, message);
 
         var pendingMessage = new PendingMessage
         {
             ContentId = 0,
             AccountId = 0,
-            LogKind = message.LogKind,
-            SourceKind = message.SourceKind,
-            TargetKind = message.TargetKind,
-            Sender = message.Sender,
-            Content = message.Message,
+            LogKind = type,
+            SourceKind = XivChatRelationKind.LocalPlayer,
+            TargetKind = XivChatRelationKind.LocalPlayer,
+            Sender = sender,
+            Content = message,
         };
 
         // Update colour codes.

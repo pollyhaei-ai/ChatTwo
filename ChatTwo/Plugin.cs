@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Numerics;
 using ChatTwo.Http;
 using ChatTwo.Ipc;
@@ -9,13 +8,13 @@ using ChatTwo.Ui;
 using ChatTwo.Ui.ChatLog;
 using ChatTwo.Util;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiFileDialog;
-using FFXIVClientStructs.FFXIV.Client.Enums;
 
 namespace ChatTwo;
 
@@ -235,11 +234,13 @@ public sealed class Plugin : IDalamudPlugin
 
     public void LanguageChanged(string langCode)
     {
-        var info = Config.LanguageOverride is LanguageOverride.None
-            ? new CultureInfo(langCode)
-            : new CultureInfo(Config.LanguageOverride.Code());
+        // Dalamud's Traditional Chinese code is "tw". CultureInfo treats that as Twi and
+        // would not load Language.zh-Hant.resx, so the chat menu stayed in English.
+        var code = Config.LanguageOverride is LanguageOverride.None
+            ? langCode
+            : Config.LanguageOverride.Code();
 
-        Language.Culture = info;
+        Language.Culture = UiLanguage.Resolve(code);
     }
 
     private static readonly string[] ChatAddonNames =
@@ -267,5 +268,6 @@ public sealed class Plugin : IDalamudPlugin
     public static bool InBattle => Condition[ConditionFlag.InCombat];
     public static bool GposeActive => Condition[ConditionFlag.WatchingCutscene];
     public static bool CutsceneActive => Condition[ConditionFlag.OccupiedInCutSceneEvent] || Condition[ConditionFlag.WatchingCutscene78];
-    public static bool InKeyboundBrawler => Sheets.TerritorySheet.TryGetRow(ClientState.TerritoryType, out var territoryType) && territoryType.TerritoryIntendedUse.RowId == (uint)TerritoryIntendedUse.KeyboundBrawler;
+    // TerritoryIntendedUse.KeyboundBrawler is 65. This client's sheets expose the id, not that enum.
+    public static bool InKeyboundBrawler => Sheets.TerritorySheet.TryGetRow(ClientState.TerritoryType, out var territoryType) && territoryType.TerritoryIntendedUse.RowId == 65;
 }

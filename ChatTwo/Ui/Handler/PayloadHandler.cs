@@ -133,7 +133,8 @@ public sealed class PayloadHandler
 
     private void ContextFooter(bool didCustomContext, Chunk chunk)
     {
-        ImRaii.MenuDisposable menu = default;
+        // IEndObject is an interface. A default value is null, so dispose has to be conditional.
+        ImRaii.IEndObject? menu = null;
         if (didCustomContext)
         {
             ImGui.Separator();
@@ -145,7 +146,10 @@ public sealed class PayloadHandler
             // copy the message content without having to open a submenu.
             menu = ImRaii.Menu(Plugin.PluginName);
             if (!menu.Success)
+            {
+                menu.Dispose();
                 return;
+            }
         }
 
         // ScreenshotMode changed, so we inform the webinterface about the new message format
@@ -175,7 +179,7 @@ public sealed class PayloadHandler
             ImGui.TextUnformatted(message.Code.Type.Name());
         }
 
-        menu.Dispose();
+        menu?.Dispose();
     }
 
     private static string StringifyMessage(Message? message, bool withSender = false)
@@ -497,8 +501,12 @@ public sealed class PayloadHandler
             if (Plugin.PlayerState.HomeWorld.IsValid)
                 world = Plugin.PlayerState.HomeWorld;
 
+        // Naming the world needs no native call, so Taiwan worlds are included here.
+        // The action block below still splits: public worlds keep native calls, Taiwan
+        // worlds only get text commands.
+        var worldIsNameable = Sheets.IsPublicOrTaiwan(world.Value);
         var name = new List<Chunk> { new TextChunk(ChunkSource.None, null, player.PlayerName) };
-        if (world.Value.IsPublic)
+        if (worldIsNameable)
         {
             name.AddRange([
                 new IconChunk(ChunkSource.None, null, BitmapFontIcon.CrossWorld),
@@ -516,7 +524,7 @@ public sealed class PayloadHandler
             if (!Sheets.IsInForay())
             {
                 InputHandler.ChatInput = $"/tell {player.PlayerName}";
-                if (world.Value.IsPublic)
+                if (worldIsNameable)
                     InputHandler.ChatInput += $"@{world.Value.Name}";
 
                 InputHandler.ChatInput += " ";
@@ -529,11 +537,13 @@ public sealed class PayloadHandler
             InputHandler.Activate = true;
         }
 
-        if (world.Value.IsPublic)
+        var scope = PlayerMenuRouting.Scope(world.Value.IsPublic, world.RowId);
+        if (scope == PlayerMenuScope.Full)
         {
             var party = Plugin.PartyList;
             var leader = party[(int) party.PartyLeaderIndex]?.ContentId;
-            var isLeader = party.Length == 0 || Plugin.PlayerState.ContentId == leader;
+            // IPartyMember.ContentId is a long on API 13.
+            var isLeader = party.Length == 0 || Plugin.PlayerState.ContentId == (ulong?)leader;
             var member = party.FirstOrDefault(member => member.Name.TextValue == player.PlayerName && member.World.RowId == world.RowId);
             var isInParty = member != null;
             var inInstance = GameFunctions.GameFunctions.IsInInstance();
@@ -564,10 +574,10 @@ public sealed class PayloadHandler
                 if (isInParty && member != null && (!inInstance || (inInstance && inPartyInstance)))
                 {
                     if (ImGui.Selectable(Language.Context_Promote))
-                        GameFunctions.Party.Promote(player.PlayerName, member.ContentId);
+                        GameFunctions.Party.Promote(player.PlayerName, (ulong)member.ContentId);
 
                     if (ImGui.Selectable(Language.Context_KickFromParty))
-                        GameFunctions.Party.Kick(player.PlayerName, member.ContentId);
+                        GameFunctions.Party.Kick(player.PlayerName, (ulong)member.ContentId);
                 }
             }
 
@@ -598,6 +608,21 @@ public sealed class PayloadHandler
             if (GameFunctions.GameFunctions.IsMentor() && ImGui.Selectable(Language.Context_InviteToNoviceNetwork))
                 GameFunctions.Context.InviteToNoviceNetwork(player.PlayerName, (ushort) world.RowId);
         }
+        else if (scope == PlayerMenuScope.TextCommandsOnly)
+        {
+            // No friend-list lookup: that native read has not been verified on the TC client.
+            // The game answers a duplicate friend request on its own.
+            // Party invite is /invite through the chat box, not InfoProxyPartyInvite.
+            if (ImGui.Selectable(Language.Context_InviteToParty))
+                InputHandler.Plugin.Functions.InviteToParty(player.PlayerName, (ushort) world.RowId);
+
+            if (ImGui.Selectable(Language.Context_SendFriendRequest))
+                InputHandler.Plugin.Functions.SendFriendRequest(player.PlayerName, (ushort) world.RowId);
+
+            using var menuBlockFunctions = ImRaii.Menu(Language.Context_BlockFunctions);
+            if (menuBlockFunctions.Success && ImGui.Selectable(Language.Context_AddToBlacklist))
+                InputHandler.Plugin.Functions.AddToBlacklist(player.PlayerName, (ushort) world.RowId);
+        }
 
         var inputChannel = chunk.Message?.Code.Type.ToInputChannel();
         if (inputChannel != null && ImGui.Selectable(Language.Context_ReplyInSelectedChatMode))
@@ -616,6 +641,7 @@ public sealed class PayloadHandler
 
     private IPlayerCharacter? FindCharacterForPayload(PlayerPayload payload)
     {
+        IPlayerCharacter? nameOnly = null;
         foreach (var obj in Plugin.ObjectTable)
         {
             if (obj is not IPlayerCharacter character)
@@ -624,13 +650,17 @@ public sealed class PayloadHandler
             if (character.Name.TextValue != payload.PlayerName)
                 continue;
 
-            if (payload.World.Value.IsPublic && character.HomeWorld.RowId != payload.World.RowId)
-                continue;
-
-            return character;
+            switch (PlayerMenuRouting.MatchNamedTarget(payload.World.Value.IsPublic, payload.World.RowId, character.HomeWorld.RowId))
+            {
+                case TargetMatch.Take:
+                    return character;
+                case TargetMatch.Fallback:
+                    nameOnly ??= character;
+                    break;
+            }
         }
 
-        return null;
+        return nameOnly;
     }
 
     private void DrawUriPopup(UriPayload uri)
