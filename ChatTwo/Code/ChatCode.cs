@@ -8,9 +8,16 @@ public class ChatCode
     public XivChatRelationKind Source { get; }
     public XivChatRelationKind Target { get; }
 
+    /// <summary>
+    /// API 13 passes the game's packed chat code through <c>ChatMessageUnhandled</c>
+    /// (log kind in the low 7 bits, relationship nibbles above that). A value such as
+    /// 4922 is not a <see cref="ChatType"/>, so the tab filter drops the message and
+    /// the stored <c>ChatType</c> is unreadable to an older build. Masking is a no-op
+    /// when the value is already a bare log kind.
+    /// </summary>
     public ChatCode(XivChatType type, XivChatRelationKind source, XivChatRelationKind target)
     {
-        Type = (ChatType)type;
+        Type = (ChatType)((ushort)type & 0x7F);
         Source = source;
         Target = target;
     }

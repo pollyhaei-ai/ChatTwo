@@ -20,26 +20,28 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using InteropGenerator.Runtime;
 using Lumina.Text.ReadOnly;
 
-using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
+using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
 
 namespace ChatTwo.GameFunctions;
 
 public sealed unsafe class Chat : IDisposable
 {
     // Functions
-    [Signature("48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC ?? 48 8D B9 ?? ?? ?? ?? 33 C0")]
+    // Fallible so a signature that does not match the TC client turns that feature off
+    // instead of failing the whole plugin load.
+    [Signature("48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC ?? 48 8D B9 ?? ?? ?? ?? 33 C0", Fallibility = Fallibility.Fallible)]
     private readonly delegate* unmanaged<RaptureLogModule*, ushort, Utf8String*, Utf8String*, ulong, ulong, ushort, byte, int, byte, void> PrintTellNative = null!;
 
-    [Signature("E8 ?? ?? ?? ?? 48 8D 4C 24 ?? E8 ?? ?? ?? ?? 48 8D 8C 24 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 48 8B 8C 24")]
+    [Signature("E8 ?? ?? ?? ?? 48 8D 4C 24 ?? E8 ?? ?? ?? ?? 48 8D 8C 24 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 48 8B 8C 24", Fallibility = Fallibility.Fallible)]
     private readonly delegate* unmanaged<NetworkModule*, ulong, ushort, Utf8String*, Utf8String*, ushort, ushort, byte> SendTellNative = null!;
 
     // Client::UI::AddonChatLog.OnRefresh
-    [Signature("40 53 57 41 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 4D 8B F8", DetourName = nameof(ChatLogRefreshDetour))]
+    [Signature("40 53 57 41 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 4D 8B F8", DetourName = nameof(ChatLogRefreshDetour), Fallibility = Fallibility.Fallible)]
     private Hook<ChatLogRefreshDelegate>? ChatLogRefreshHook = null!;
     private delegate byte ChatLogRefreshDelegate(nint log, ushort eventId, AtkValue* value);
 
     // Replace with CS version later
-    [Signature("48 89 5C 24 ?? 55 56 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 83 B9", DetourName = nameof(ContextMenuTellInForayDetour))]
+    [Signature("48 89 5C 24 ?? 55 56 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 83 B9", DetourName = nameof(ContextMenuTellInForayDetour), Fallibility = Fallibility.Fallible)]
     private Hook<ContextMenuTellInForayDelegate>? ContextMenuTellInForayHook = null!;
     private delegate void ContextMenuTellInForayDelegate(RaptureShellModule* module, Utf8String* playerName, Utf8String* worldName, ushort worldId, ulong accountId, ulong contentId, ushort reason);
 
@@ -47,8 +49,9 @@ public sealed unsafe class Chat : IDisposable
     private readonly Hook<RaptureShellModule.Delegates.ReplyInSelectedChatMode>? ReplyInSelectedChatModeHook;
     private readonly Hook<RaptureShellModule.Delegates.SetContextTellTarget>? SetChatLogTellTargetHook;
 
-    // Pointers
-    [Signature("48 8D 1D ?? ?? ?? ?? 8B 05", ScanType = ScanType.StaticAddress)]
+    // Pointers. TC client uses lea rsi here; the international lea rbx pattern is left unmatched
+    // rather than hooked at the wrong site.
+    [Signature("48 8D 35 ?? ?? ?? ?? 8B 05", ScanType = ScanType.StaticAddress, Fallibility = Fallibility.Fallible)]
     private readonly char* LastTypedCharacter = null!;
 
     private Plugin Plugin { get; }
@@ -56,7 +59,14 @@ public sealed unsafe class Chat : IDisposable
     public Chat(Plugin plugin)
     {
         Plugin = plugin;
-        Plugin.GameInteropProvider.InitializeFromAttributes(this);
+        try
+        {
+            Plugin.GameInteropProvider.InitializeFromAttributes(this);
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Chat signatures failed to resolve; native tell and chat-focus hooks are off");
+        }
 
         ChatLogRefreshHook?.Enable();
         ContextMenuTellInForayHook?.Enable();
@@ -510,6 +520,22 @@ public sealed unsafe class Chat : IDisposable
             return;
         }
 
+        if (SendTellNative == null || PrintTellNative == null)
+        {
+            var worldName = Sheets.WorldSheet.TryGetRow(homeWorld, out var worldRow) ? worldRow.Name.ToString() : string.Empty;
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(worldName))
+            {
+                Plugin.ChatGui.PrintError(Language.Chat_SendTell_Error);
+                return;
+            }
+
+            Plugin.Log.Warning("Native tell is unavailable; sending as a /tell text command");
+            var tellBytes = Encoding.UTF8.GetBytes(TellRouting.TextCommand(name, worldName, rawText));
+            AutoTranslate.ReplaceWithPayload(ref tellBytes);
+            ChatBox.SendMessageUnsafe(tellBytes);
+            return;
+        }
+
         var uName = Utf8String.FromString(name);
         var uMessage = Utf8String.FromSequence(message.NullTerminate());
 
@@ -565,6 +591,6 @@ public sealed unsafe class Chat : IDisposable
         // second before the cutscene actually starts, because the game sets
         // the cutscene conditions before processing the skip.
         var raptureAtkUnitManager = RaptureAtkUnitManager.Instance();
-        return raptureAtkUnitManager == null || raptureAtkUnitManager->UiFlags.HasFlag(UiFlags.Chat);
+        return raptureAtkUnitManager == null || raptureAtkUnitManager->UiFlags.HasFlag(UIModule.UiFlags.Chat);
     }
 }

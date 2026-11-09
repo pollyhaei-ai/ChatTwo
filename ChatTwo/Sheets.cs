@@ -1,4 +1,5 @@
-﻿using Dalamud.Game.ClientState.Objects.SubKinds;
+﻿using ChatTwo.Util;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 
@@ -37,9 +38,16 @@ public static class Sheets
         TerritorySheet.TryGetRow(Plugin.ClientState.TerritoryType, out var row) &&
         row.TerritoryIntendedUse.RowId is 41 or 61;
 
+    // TC worlds (4028 伊弗利特 through 4035 泰坦) have World.IsPublic == false in the client
+    // data. Filtering on IsPublic alone empties the tell-target world list. The same data
+    // centre also contains test worlds, so only that row range is included.
+    public static bool IsPublicOrTaiwan(World world) =>
+        world.IsPublic || TellRouting.IsTaiwanWorld(world.RowId);
+
     public static IEnumerable<World> WorldsOnDatacenter(IPlayerCharacter character)
     {
-        var dcRow = character.HomeWorld.Value.DataCenter.Value.Region.RowId;
-        return WorldSheet.Where(world => world.IsPublic && world.DataCenter.Value.Region.RowId == dcRow);
+        // WorldDCGroupType.Region is a byte on this client's sheets, not a row reference.
+        var dcRow = character.HomeWorld.Value.DataCenter.Value.Region;
+        return WorldSheet.Where(world => IsPublicOrTaiwan(world) && world.DataCenter.Value.Region == dcRow);
     }
 }

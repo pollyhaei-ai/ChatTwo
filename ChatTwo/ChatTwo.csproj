@@ -1,7 +1,10 @@
-<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+<Project Sdk="Dalamud.NET.Sdk/13.1.0">
     <PropertyGroup>
-        <Version>1.41.2</Version>
+        <Version>1.42.2</Version>
+        <TargetFramework>net9.0-windows7.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
+        <Authors>Infi, Anna</Authors>
+        <AssemblyName>ChatTwo</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
@@ -25,6 +28,11 @@
         <EmbeddedResource Update="Resources\Language.resx">
             <Generator>ResXFileCodeGenerator</Generator>
             <LastGenOutput>Language.Designer.cs</LastGenOutput>
+        </EmbeddedResource>
+        <!-- CultureInfo("zh-Hant") loads this satellite. Dalamud UI language "tw" is mapped to zh-Hant. -->
+        <EmbeddedResource Update="Resources\Language.zh-Hant.resx">
+            <WithCulture>true</WithCulture>
+            <Culture>zh-Hant</Culture>
         </EmbeddedResource>
     </ItemGroup>
 

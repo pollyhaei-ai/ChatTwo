@@ -109,7 +109,7 @@ public class ChunkHandler
                 : ColourUtil.RgbaToVector4(type.DefaultColor());
         }
 
-        using var pushedColor = ImRaii.PushColor(ImGuiCol.Text, color);
+        using var pushedColor = color is { } textColor ? ImRaii.PushColor(ImGuiCol.Text, textColor) : null;
 
         var disposableFont = Plugin.Config.FontsEnabled && Plugin.FontManager.ItalicFont != null
             ? Plugin.FontManager.ItalicFont

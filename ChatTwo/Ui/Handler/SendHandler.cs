@@ -2,6 +2,7 @@
 using ChatTwo.Code;
 using ChatTwo.GameFunctions;
 using ChatTwo.GameFunctions.Types;
+using ChatTwo.Resources;
 using ChatTwo.Util;
 
 namespace ChatTwo.Ui.Handler;
@@ -60,14 +61,10 @@ public class SendHandler
                 var target = activeTab.TellTarget.IsSet() ? activeTab.TellTarget : activeTab.CurrentChannel.TempTellTarget ?? activeTab.CurrentChannel.TellTarget;
                 if (target != null)
                 {
-                    // ContentId 0 is a case where we can't directly send messages, so we send a /tell formatted message and let the game handle it
+                    // ContentId 0 cannot be addressed natively. A text command lets the game resolve it.
                     if (target.ContentId == 0)
                     {
-                        trimmed = $"/tell {target.ToTargetString()} {trimmed}";
-                        var tellBytes = Encoding.UTF8.GetBytes(trimmed);
-                        AutoTranslate.ReplaceWithPayload(ref tellBytes);
-
-                        ChatBox.SendMessageUnsafe(tellBytes);
+                        SendTellAsTextCommand(target.Name, target.ToWorldString(), trimmed);
 
                         activeTab.CurrentChannel.ResetTempChannel();
                         chatInput = string.Empty;
@@ -75,16 +72,29 @@ public class SendHandler
                     }
 
                     var reason = target.Reason;
-                    var world = Sheets.WorldSheet.GetRow(target.World);
-                    if (world is { IsPublic: true })
+                    var worldName = target.ToWorldString();
+                    var worldIsPublic = Sheets.WorldSheet.TryGetRow(target.World, out var world) && world.IsPublic;
+                    switch (TellRouting.Decide(worldIsPublic, target.World, target.Name, worldName))
                     {
-                        if (reason == TellReason.Reply && GameFunctions.GameFunctions.GetFriends().Any(friend => friend.ContentId == target.ContentId))
-                            reason = TellReason.Friend;
+                        case TellRoute.Native:
+                        {
+                            if (reason == TellReason.Reply && GameFunctions.GameFunctions.GetFriends().Any(friend => friend.ContentId == target.ContentId))
+                                reason = TellReason.Friend;
 
-                        var tellBytes = Encoding.UTF8.GetBytes(trimmed);
-                        AutoTranslate.ReplaceWithPayload(ref tellBytes);
+                            var tellBytes = Encoding.UTF8.GetBytes(trimmed);
+                            AutoTranslate.ReplaceWithPayload(ref tellBytes);
 
-                        Plugin.Functions.Chat.SendTell(reason, target.ContentId, target.Name, (ushort) world.RowId, tellBytes, trimmed);
+                            Plugin.Functions.Chat.SendTell(reason, target.ContentId, target.Name, (ushort) world.RowId, tellBytes, trimmed);
+                            break;
+                        }
+                        case TellRoute.TextCommand:
+                            Plugin.Log.Information($"Tell target on world {target.World} is not flagged public; sending it as a /tell text command");
+                            SendTellAsTextCommand(target.Name, worldName, trimmed);
+                            break;
+                        default:
+                            Plugin.Log.Warning($"Tell not sent: world {target.World} cannot be addressed");
+                            Plugin.ChatGui.PrintError(Language.Chat_SendTell_Error);
+                            break;
                     }
 
                     activeTab.CurrentChannel.ResetTempChannel();
@@ -106,6 +116,19 @@ public class SendHandler
 
         activeTab.CurrentChannel.ResetTempChannel();
         chatInput = string.Empty;
+    }
+
+    private static void SendTellAsTextCommand(string name, string worldName, string text)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(worldName))
+        {
+            Plugin.ChatGui.PrintError(Language.Chat_SendTell_Error);
+            return;
+        }
+
+        var tellBytes = Encoding.UTF8.GetBytes(TellRouting.TextCommand(name, worldName, text));
+        AutoTranslate.ReplaceWithPayload(ref tellBytes);
+        ChatBox.SendMessageUnsafe(tellBytes);
     }
 
     private bool HasTranslationCommand(string trimmed)

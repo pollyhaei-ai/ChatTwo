@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Numerics;
 using ChatTwo.Http;
 using ChatTwo.Ipc;
@@ -9,13 +8,13 @@ using ChatTwo.Ui;
 using ChatTwo.Ui.ChatLog;
 using ChatTwo.Util;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiFileDialog;
-using FFXIVClientStructs.FFXIV.Client.Enums;
 
 namespace ChatTwo;
 
@@ -96,6 +95,8 @@ public sealed class Plugin : IDalamudPlugin
             if (Config.Tabs.Count == 0)
                 Config.Tabs.Add(TabsUtil.VanillaGeneral);
 
+            RestoreChannelFilters();
+
             LanguageChanged(Interface.UiLanguage);
             ImGuiUtil.Initialize(this);
 
@@ -112,6 +113,7 @@ public sealed class Plugin : IDalamudPlugin
             FontManager = new FontManager();
 
             MessageManager = new MessageManager(this); // Does it require UI?
+            Log.Information($"Chat database: {MessageManager.DatabasePath()}");
 
             ChatLog = new ChatLog(this);
             SettingsWindow = new SettingsWindow(this);
@@ -233,13 +235,59 @@ public sealed class Plugin : IDalamudPlugin
         Interface.SavePluginConfig(Config);
     }
 
+    // 1.42.0 removed ChatCodes, so a config saved by an older ChatTwo loaded with every
+    // tab's channel list empty. Empty means the tab shows nothing, which is the blank log.
+    private void RestoreChannelFilters()
+    {
+#pragma warning disable CS0618
+        var changed = false;
+
+        if (Config.InactivityHideChannels.Count > 0 && Config.InactivityHideChannelsV2.Count == 0)
+        {
+            Config.InactivityHideChannelsV2 = Config.InactivityHideChannels.ToDictionary(pair => pair.Key, pair => (pair.Value, pair.Value));
+            Config.InactivityHideChannels.Clear();
+            changed = true;
+        }
+
+        foreach (var tab in Config.Tabs)
+        {
+            if (tab.ChatCodes.Count > 0 && tab.SelectedChannels.Count == 0)
+            {
+                tab.SelectedChannels = tab.ChatCodes.ToDictionary(pair => pair.Key, pair => (pair.Value, pair.Value));
+                Log.Information($"Restored {tab.SelectedChannels.Count} channels on tab '{tab.Name}' from the older ChatCodes list");
+                tab.ChatCodes.Clear();
+                changed = true;
+                continue;
+            }
+
+            if (tab.SelectedChannels.Count == 0)
+            {
+                tab.SelectedChannels = TabsUtil.AllChannels();
+                Log.Information($"Tab '{tab.Name}' had no channels selected. Enabled every channel so the log is not blank.");
+                changed = true;
+            }
+        }
+
+        if (Config.Version < 6)
+        {
+            Config.Version = 6;
+            changed = true;
+        }
+
+        if (changed)
+            SaveConfig();
+#pragma warning restore CS0618
+    }
+
     public void LanguageChanged(string langCode)
     {
-        var info = Config.LanguageOverride is LanguageOverride.None
-            ? new CultureInfo(langCode)
-            : new CultureInfo(Config.LanguageOverride.Code());
+        // Dalamud's Traditional Chinese code is "tw". CultureInfo treats that as Twi and
+        // would not load Language.zh-Hant.resx, so the chat menu stayed in English.
+        var code = Config.LanguageOverride is LanguageOverride.None
+            ? langCode
+            : Config.LanguageOverride.Code();
 
-        Language.Culture = info;
+        Language.Culture = UiLanguage.Resolve(code);
     }
 
     private static readonly string[] ChatAddonNames =
@@ -267,5 +315,6 @@ public sealed class Plugin : IDalamudPlugin
     public static bool InBattle => Condition[ConditionFlag.InCombat];
     public static bool GposeActive => Condition[ConditionFlag.WatchingCutscene];
     public static bool CutsceneActive => Condition[ConditionFlag.OccupiedInCutSceneEvent] || Condition[ConditionFlag.WatchingCutscene78];
-    public static bool InKeyboundBrawler => Sheets.TerritorySheet.TryGetRow(ClientState.TerritoryType, out var territoryType) && territoryType.TerritoryIntendedUse.RowId == (uint)TerritoryIntendedUse.KeyboundBrawler;
+    // TerritoryIntendedUse.KeyboundBrawler is 65. This client's sheets expose the id, not that enum.
+    public static bool InKeyboundBrawler => Sheets.TerritorySheet.TryGetRow(ClientState.TerritoryType, out var territoryType) && territoryType.TerritoryIntendedUse.RowId == 65;
 }

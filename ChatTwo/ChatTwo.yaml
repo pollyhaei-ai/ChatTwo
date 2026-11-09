@@ -1,54 +1,43 @@
 name: Chat 2
 author: Infi, Anna
-punchline: Electric Boogaloo - ♪ A whole new chat, a new fantastic chat window ♪
+dalamud_api_level: 13
+punchline: 電光石火 - 台服用的聊天視窗（非官方移植）
 description: |-
-  Chat 2 is a complete rewrite of the in-game chat window as a plugin.
-  It supports:
+  Chat 2 是遊戲內建聊天視窗的完整重寫。
+  支援：
 
-  - Unlimited tabs
-  - Tabs that always send to a certain channel
-  - More flexible filtering
-  - RGB channel colouring
-  - Completely variable font size
-  - Sidebar tabs
-  - Unread counts
-  - Emotes
-  - Screenshot mode (obfuscate names)
-repo_url: https://github.com/Infiziert90/ChatTwo
+  - 無限分頁
+  - 固定發送到特定頻道的分頁
+  - 更靈活的過濾
+  - RGB 頻道顏色
+  - 可調字體大小
+  - 側邊欄分頁
+  - 未讀計數
+  - 表情符號
+  - 截圖模式（隱藏名稱）
+
+  這個組建給台灣版用戶端：yanmucorp Dalamud API 13、.NET 9、XIVTCLauncher。
+  不要裝到官方 Dalamud API 14／15。
+  上游是 Infiziert90/ChatTwo，作者 Infi、Anna。這不是官方插件。
+repo_url: https://github.com/pollyhaei-ai/ChatTwo
 accepts_feedback: true
 tags:
   - Social
   - UI
   - Chat
   - Replacement
-changelog:  |-
-  **New Feature Added~**
-  - A web interface has been added
-  - *This will not function if your game client is offline or you are logged out of the game*
+changelog: |-
+  1.42.2（台服）
+  - 修正分頁頻道全關、聊天區仍然空白。舊設定的 ChatCodes 會再讀回來；已經被清掉的分頁會改為全開
+  - 右鍵「發送組隊邀請」仍以 /invite 送出；好友與黑名單同樣走文字指令
 
-  **Main Features**
-  - View in-game chat on any device that has a web browser functionality
-  - Can send chat messages through the web interface directly into the game itself
-  - Easily copy & paste messages
-  - Option for automatic starting the web interface feature
-  - Log lines render limit for faster loading performance [Default 1000]
+  1.42.1（台服）
+  - 修正聊天視窗空白：API 13 送來的頻道代碼要先取低 7 位元，否則每一則訊息都被分頁過濾掉
+  - 不再因為讀取失敗或資料庫升級而刪除共用的聊天記錄
+  - 右鍵「發送組隊邀請」仍以 /invite 送出；好友與黑名單同樣走文字指令
 
-  **Security**
-  - This feature is not intended to be used outside of your local, private network
-  - Do not forward ports that are described inside the chat2 options panel
-  - Never share your authentication code under any circumstances
-  - Multi-box support is not provided, the web interface will track only the first client
-
-  **Additional Features soon to be Added**
-  - Display errors as small notifications inside the web interface
-
-  **Planned Features**
-  - Multiple Tabs support
-  - Browser specific settings
-  - Stylization support
-
-  **Additional Permissions Note**
-  - Users that wish to expand this to apps or other platforms are welcome to do so
-
-  *Note: An FAQ will be provided in the chat2 thread on the dalamud discord, linked in the About section*
-
+  1.42.0（台服）
+  - 改為 Dalamud API 13 / .NET 9，給 XIVTCLauncher 使用
+  - 台服世界的右鍵選單恢復「發送組隊邀請」，以 /invite 文字指令送出
+  - 好友申請與黑名單同樣改走文字指令
+  - 介面語言 tw 會載入繁體中文
