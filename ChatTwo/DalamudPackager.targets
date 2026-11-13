@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+    <!--
+      DalamudPackager 13.1.0 does not forward HandleImages, and the default
+      (true) omits images/icon.png from latest.zip. Dev-plugin zips need that
+      file inside the plugin folder, next to ChatTwo.dll.
+    -->
+    <Target Name="DalamudPackagerDebug"
+            AfterTargets="Build"
+            Condition="'$(Configuration)' == 'Debug'">
+        <DalamudPackager ProjectDir="$(ProjectDir)"
+                         OutputPath="$(OutputPath)"
+                         AssemblyName="$(AssemblyName)"
+                         MakeZip="false"
+                         HandleImages="false" />
+    </Target>
+
+    <Target Name="DalamudPackagerRelease"
+            AfterTargets="Build"
+            Condition="'$(Configuration)' == 'Release'">
+        <DalamudPackager ProjectDir="$(ProjectDir)"
+                         OutputPath="$(OutputPath)"
+                         AssemblyName="$(AssemblyName)"
+                         MakeZip="true"
+                         HandleImages="false" />
+    </Target>
+</Project>
