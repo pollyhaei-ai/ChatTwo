@@ -37,7 +37,11 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="images\" />
+        <!-- Dev plugins load images/icon.png beside the DLL before falling back to IconUrl. -->
+        <Content Include="images\icon.png">
+            <TargetPath>images\icon.png</TargetPath>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>

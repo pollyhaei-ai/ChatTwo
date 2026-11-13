@@ -20,6 +20,10 @@ description: |-
   不要裝到官方 Dalamud API 14／15。
   上游是 Infiziert90/ChatTwo，作者 Infi、Anna。這不是官方插件。
 repo_url: https://github.com/pollyhaei-ai/ChatTwo
+icon_url: https://raw.githubusercontent.com/pollyhaei-ai/ChatTwo/main/ChatTwo/images/icon.png
+image_urls:
+  - https://raw.githubusercontent.com/pollyhaei-ai/ChatTwo/main/ChatTwo/images/chatWindow.png
+  - https://raw.githubusercontent.com/pollyhaei-ai/ChatTwo/main/ChatTwo/images/withSimpleTweaks.png
 accepts_feedback: true
 tags:
   - Social
